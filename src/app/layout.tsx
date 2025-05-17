@@ -8,7 +8,7 @@ const geistSans = GeistSans; // Use the imported variable directly
 const geistMono = GeistMono;
 
 export const metadata: Metadata = {
-  title: 'RepoDash',
+  title: 'DC dashboard',
   description: 'Manage your YouTube feeds from your GitHub repository.',
 };
 

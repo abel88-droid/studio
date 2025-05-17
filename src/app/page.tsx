@@ -1,10 +1,10 @@
 
 import { getFeeds, getRawJson } from '@/lib/feed-actions';
 import { FeedDashboard } from '@/components/FeedDashboard';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'RepoDash - YouTube Feed Manager',
+  title: 'DC dashboard - YouTube Feed Manager',
   description: 'Manage your YouTube feeds from your GitHub repository.',
 };
 
@@ -17,7 +17,7 @@ export default async function HomePage() {
     <div className="container mx-auto min-h-screen p-4 py-8 md:p-8">
       <header className="mb-12 text-center">
         <h1 className="text-5xl font-bold tracking-tight text-primary">
-          RepoDash
+          DC dashboard
         </h1>
         <p className="mt-2 text-lg text-muted-foreground">
           Your YouTube Feed Management Dashboard
@@ -29,7 +29,7 @@ export default async function HomePage() {
       </main>
 
       <footer className="mt-16 border-t pt-8 text-center text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} RepoDash. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} DC dashboard. All rights reserved.</p>
         <p>Powered by Next.js, ShadCN UI, and Genkit.</p>
       </footer>
     </div>
