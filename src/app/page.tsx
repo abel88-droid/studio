@@ -1,3 +1,4 @@
+
 import { getFeeds, getRawJson } from '@/lib/feed-actions';
 import { FeedDashboard } from '@/components/FeedDashboard';
 import { Metadata } from 'next';
@@ -8,7 +9,8 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const initialFeeds = await getFeeds();
+  // getFeeds now returns DisplayFeedItem[]
+  const initialFeeds = await getFeeds(); 
   const initialRawJson = await getRawJson();
 
   return (

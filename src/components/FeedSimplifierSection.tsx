@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, type FC } from 'react';
@@ -7,27 +8,28 @@ import { Sparkles, Loader2 } from 'lucide-react';
 import type { SimplifyFeedsOutput } from '@/ai/flows/simplify-feeds';
 
 interface FeedSimplifierSectionProps {
-  feeds: string[];
+  feeds: string[]; // Expects an array of URLs
   onSimplifyFeeds: (feedUrls: string[]) => Promise<SimplifyFeedsOutput>;
 }
 
 export const FeedSimplifierSection: FC<FeedSimplifierSectionProps> = ({ feeds, onSimplifyFeeds }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingAI, setIsLoadingAI] = useState(false); // Renamed to avoid conflict with dashboard loading
   const [error, setError] = useState<string | null>(null);
 
   const handleSimplify = async () => {
-    setIsLoading(true);
+    setIsLoadingAI(true);
     setError(null);
     setSuggestions([]);
     try {
-      const result = await onSimplifyFeeds(feeds);
+      // 'feeds' prop is already an array of URLs, passed correctly from FeedDashboard
+      const result = await onSimplifyFeeds(feeds); 
       setSuggestions(result.suggestions);
     } catch (err) {
       setError('Failed to get suggestions. Please try again.');
       console.error(err);
     } finally {
-      setIsLoading(false);
+      setIsLoadingAI(false);
     }
   };
 
@@ -43,8 +45,8 @@ export const FeedSimplifierSection: FC<FeedSimplifierSectionProps> = ({ feeds, o
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button onClick={handleSimplify} disabled={isLoading || feeds.length === 0} className="w-full sm:w-auto">
-          {isLoading ? (
+        <Button onClick={handleSimplify} disabled={isLoadingAI || feeds.length === 0} className="w-full sm:w-auto">
+          {isLoadingAI ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <Sparkles className="mr-2 h-4 w-4" />
@@ -62,10 +64,10 @@ export const FeedSimplifierSection: FC<FeedSimplifierSectionProps> = ({ feeds, o
             </ul>
           </div>
         )}
-         {suggestions.length === 0 && !isLoading && !error && feeds.length > 0 && (
+         {suggestions.length === 0 && !isLoadingAI && !error && feeds.length > 0 && (
           <p className="text-sm text-muted-foreground pt-4">Click "Analyze Feeds" to get suggestions.</p>
         )}
-        {feeds.length === 0 && !isLoading && (
+        {feeds.length === 0 && !isLoadingAI && (
             <p className="text-sm text-muted-foreground pt-4">Add some feeds to analyze them.</p>
         )}
       </CardContent>

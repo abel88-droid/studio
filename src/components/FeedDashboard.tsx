@@ -12,9 +12,8 @@ import { ListChecks, PlusCircle, Edit3, AlertTriangle, CheckCircle, Loader2 } fr
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import type { SimplifyFeedsOutput, FeedData, FeedChannelInfo } from '@/ai/flows/simplify-feeds'; // Assuming SimplifyFeedsOutput is also in types or ai/flows
+import type { SimplifyFeedsOutput, FeedData, DisplayFeedItem } from '@/types';
 
-// Helper functions (can be moved to a utils file if used elsewhere)
 function extractChannelIdFromUrl(url: string): string | null {
   try {
     const parsedUrl = new URL(url);
@@ -29,30 +28,33 @@ function constructFeedUrl(channelId: string): string {
   return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
 }
 
-function getUrlsFromFeedData(feedData: FeedData): string[] {
-  return Object.keys(feedData).map(constructFeedUrl);
+function mapFeedDataToDisplayItems(feedData: FeedData): DisplayFeedItem[] {
+  return Object.entries(feedData).map(([channelId, info]) => ({
+    channelId,
+    url: constructFeedUrl(channelId),
+    name: info.name,
+  }));
 }
 
 interface FeedDashboardProps {
-  initialFeeds: string[]; // This will now be derived from initialRawJson on client
+  initialFeeds: DisplayFeedItem[]; 
   initialRawJson: string;
 }
 
 export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson }: FeedDashboardProps) {
-  const [feeds, setFeeds] = useState<string[]>([]);
-  const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]);
+  const [feeds, setFeeds] = useState<DisplayFeedItem[]>(serverInitialFeeds);
+  const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]); // Stores URLs of selected feeds
   const [rawJsonInput, setRawJsonInput] = useState<string>(initialRawJson);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Initialize feeds from initialRawJson, as initialFeeds prop might be stale if JSON changes often
     try {
       const parsedJson = JSON.parse(initialRawJson) as FeedData;
-      setFeeds(getUrlsFromFeedData(parsedJson));
+      setFeeds(mapFeedDataToDisplayItems(parsedJson));
     } catch (e) {
       console.error("Failed to parse initialRawJson for feeds", e);
-      setFeeds(serverInitialFeeds); // Fallback to serverInitialFeeds if parsing fails
+      setFeeds(serverInitialFeeds); 
     }
     setRawJsonInput(initialRawJson);
   }, [initialRawJson, serverInitialFeeds]);
@@ -61,22 +63,21 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
   const handleAddFeed = async (url: string) => {
     setIsLoading(true);
     const result = await addFeed(url);
-    if (result.success) {
-      const channelId = extractChannelIdFromUrl(url);
-      if (channelId) {
-        setFeeds(prev => [...prev, url]); // Optimistic update for the URL list
-        try {
-            const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
-            currentJsonData[channelId] = { name: "New Channel (please edit)", discordChannel: "default_discord_id" };
-            setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
-        } catch (e) {
-            console.error("Error updating rawJsonInput after add:", e);
-            // Potentially re-fetch raw JSON here if local update fails
-        }
+    if (result.success && result.newFeedItem) {
+      setFeeds(prev => [...prev, result.newFeedItem!]);
+      try {
+          const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
+          currentJsonData[result.newFeedItem.channelId] = { 
+            name: result.newFeedItem.name, 
+            discordChannel: "default_discord_id" 
+          };
+          setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
+      } catch (e) {
+          console.error("Error updating rawJsonInput after add:", e);
       }
       toast({
         title: "Feed added",
-        description: "The new feed URL has been successfully added.",
+        description: "The new feed has been successfully added.",
         action: <CheckCircle className="text-green-500" />,
       });
     } else {
@@ -88,16 +89,16 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
       });
     }
     setIsLoading(false);
-    return result;
+    return {success: result.success, message: result.message};
   };
 
   const handleDeleteSelectedFeeds = async () => {
     if (selectedFeeds.length === 0) return;
     setIsLoading(true);
-    const result = await deleteFeeds(selectedFeeds);
+    const result = await deleteFeeds(selectedFeeds); // Pass URLs to delete
     if (result.success) {
-      const newFeeds = feeds.filter(feed => !selectedFeeds.includes(feed));
-      setFeeds(newFeeds); // Optimistic update for the URL list
+      const newFeeds = feeds.filter(feed => !selectedFeeds.includes(feed.url));
+      setFeeds(newFeeds); 
 
       try {
         const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
@@ -110,7 +111,6 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
         setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
       } catch (e) {
         console.error("Error updating rawJsonInput after delete:", e);
-         // Potentially re-fetch raw JSON here
       }
       setSelectedFeeds([]);
       toast({
@@ -135,7 +135,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     if (result.success) {
       try {
         const parsedData = JSON.parse(jsonContent) as FeedData;
-        setFeeds(getUrlsFromFeedData(parsedData)); // Derive URLs from the new JSON
+        setFeeds(mapFeedDataToDisplayItems(parsedData));
         setRawJsonInput(jsonContent); 
          toast({
           title: "JSON updated",
@@ -172,15 +172,15 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     if (selectedFeeds.length === feeds.length) {
       setSelectedFeeds([]);
     } else {
-      setSelectedFeeds(feeds.slice()); 
+      setSelectedFeeds(feeds.map(f => f.url)); 
     }
   };
 
-  const handleSimplifyFeeds = async (feedUrlsToSimplify: string[]): Promise<SimplifyFeedsOutput> => {
+  const handleSimplifyFeeds = async (): Promise<SimplifyFeedsOutput> => {
     setIsLoading(true);
+    const urlsToSimplify = feeds.map(f => f.url);
     try {
-      // Ensure we pass the current list of URLs from the state
-      const result = await simplifyFeedsAction(feedUrlsToSimplify.length > 0 ? feedUrlsToSimplify : feeds);
+      const result = await simplifyFeedsAction(urlsToSimplify);
       toast({
         title: "Analysis Complete",
         description: "Feed simplification suggestions are ready.",
@@ -216,7 +216,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
         <CardContent>
           <FeedTable
             feeds={feeds}
-            selectedFeeds={selectedFeeds}
+            selectedFeeds={selectedFeeds} // Pass the array of selected URLs
             onToggleSelectFeed={handleToggleSelectFeed}
             onToggleSelectAll={handleToggleSelectAll}
             onDeleteSelected={handleDeleteSelectedFeeds}
@@ -261,7 +261,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
       
       <Separator />
 
-      <FeedSimplifierSection feeds={feeds} onSimplifyFeeds={() => handleSimplifyFeeds(feeds)} />
+      <FeedSimplifierSection feeds={feeds.map(f => f.url)} onSimplifyFeeds={() => handleSimplifyFeeds()} />
       
       <Toaster />
       {isLoading && (

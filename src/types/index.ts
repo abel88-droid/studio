@@ -8,6 +8,12 @@ export interface FeedData {
   [channelId: string]: FeedChannelInfo;
 }
 
+export interface DisplayFeedItem {
+  channelId: string;
+  url: string;
+  name: string;
+}
+
 export interface FeedSimplificationSuggestion {
   id: string; // Or some unique identifier
   suggestion: string;

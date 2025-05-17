@@ -3,10 +3,9 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import type { FeedData, FeedChannelInfo } from '@/types';
+import type { FeedData, FeedChannelInfo, DisplayFeedItem } from '@/types';
 import { simplifyFeeds as callSimplifyFeedsAI, type SimplifyFeedsOutput } from '@/ai/flows/simplify-feeds';
 
-// Updated file path to be at the root of the project
 const feedFilePath = path.join(process.cwd(), 'feed.json');
 
 function extractChannelIdFromUrl(url: string): string | null {
@@ -29,25 +28,20 @@ async function readFeedFile(): Promise<FeedData> {
   try {
     const data = await fs.readFile(feedFilePath, 'utf-8');
     const jsonData = JSON.parse(data) as FeedData;
-    // Basic validation for the new structure
     if (typeof jsonData === 'object' && jsonData !== null && !Array.isArray(jsonData)) {
         for (const key in jsonData) {
             if (typeof jsonData[key] !== 'object' || jsonData[key] === null ||
                 typeof (jsonData[key] as FeedChannelInfo).name !== 'string' ||
                 typeof (jsonData[key] as FeedChannelInfo).discordChannel !== 'string') {
-                // Invalid structure for a channel entry, return empty
                 console.warn('Invalid channel entry in feed.json, returning empty data.');
                 return {};
             }
         }
         return jsonData;
     }
-    // If not an object or is an array, it's not the new structure
     console.warn('feed.json is not in the expected object format, returning empty data.');
     return {};
   } catch (error) {
-    // If file doesn't exist or is invalid, return empty feeds object
-    // console.error('Error reading feed.json:', error); // Less noisy for non-existent file
     return {};
   }
 }
@@ -61,26 +55,27 @@ async function writeFeedFile(data: FeedData): Promise<void> {
   }
 }
 
-export async function getFeeds(): Promise<string[]> {
+export async function getFeeds(): Promise<DisplayFeedItem[]> {
   const data = await readFeedFile();
-  return Object.keys(data).map(channelId => constructFeedUrl(channelId));
+  return Object.entries(data).map(([channelId, info]) => ({
+    channelId,
+    url: constructFeedUrl(channelId),
+    name: info.name,
+  }));
 }
 
 export async function getRawJson(): Promise<string> {
   try {
-    // Attempt to read the file
     const data = await fs.readFile(feedFilePath, 'utf-8');
-    // Ensure it's valid JSON for the new structure or return default empty object string
-    JSON.parse(data); // This will throw if invalid JSON
-    if (data.trim() === "") return "{}"; // Handle empty file case
+    JSON.parse(data); 
+    if (data.trim() === "") return "{}";
     return data;
   } catch (error) {
-    // If file doesn't exist, is empty, or contains invalid JSON, return default structure string
     return "{}";
   }
 }
 
-export async function addFeed(url: string): Promise<{ success: boolean; message?: string }> {
+export async function addFeed(url: string): Promise<{ success: boolean; message?: string; newFeedItem?: DisplayFeedItem }> {
   if (!url.startsWith('https://www.youtube.com/feeds/videos.xml?')) {
     return { success: false, message: 'Invalid YouTube feed URL format.' };
   }
@@ -94,13 +89,14 @@ export async function addFeed(url: string): Promise<{ success: boolean; message?
     return { success: false, message: 'Feed for this channel ID already exists.' };
   }
 
+  const newChannelName = "New Channel (please edit)";
   currentData[channelId] = {
-    name: "New Channel (please edit)", // Placeholder name
-    discordChannel: "default_discord_id" // Placeholder Discord channel
+    name: newChannelName,
+    discordChannel: "default_discord_id" 
   };
 
   await writeFeedFile(currentData);
-  return { success: true };
+  return { success: true, newFeedItem: { channelId, url, name: newChannelName } };
 }
 
 export async function deleteFeeds(urlsToDelete: string[]): Promise<{ success: boolean; message?: string }> {
