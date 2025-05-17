@@ -12,6 +12,7 @@ export interface DisplayFeedItem {
   channelId: string;
   url: string;
   name: string;
+  discordChannel: string; // Added discordChannel
 }
 
 export interface FeedSimplificationSuggestion {

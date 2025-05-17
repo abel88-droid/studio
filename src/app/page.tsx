@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  // getFeeds now returns DisplayFeedItem[]
+  // getFeeds now returns DisplayFeedItem[] which includes discordChannel
   const initialFeeds = await getFeeds(); 
   const initialRawJson = await getRawJson();
 

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { addFeed, deleteFeeds, updateRawJson, simplifyFeeds as simplifyFeedsAction } from '@/lib/feed-actions';
+import { addFeed, deleteFeeds, updateRawJson, simplifyFeeds as simplifyFeedsAction, updateFeedDiscordChannel } from '@/lib/feed-actions';
 import { FeedTable } from './FeedTable';
 import { AddFeedForm } from './AddFeedForm';
 import { EditJsonForm } from './EditJsonForm';
@@ -33,6 +33,7 @@ function mapFeedDataToDisplayItems(feedData: FeedData): DisplayFeedItem[] {
     channelId,
     url: constructFeedUrl(channelId),
     name: info.name,
+    discordChannel: info.discordChannel, // Ensure discordChannel is mapped
   }));
 }
 
@@ -69,7 +70,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
           const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
           currentJsonData[result.newFeedItem.channelId] = { 
             name: result.newFeedItem.name, 
-            discordChannel: "default_discord_id" 
+            discordChannel: result.newFeedItem.discordChannel // Use discordChannel from newFeedItem
           };
           setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
       } catch (e) {
@@ -135,7 +136,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     if (result.success) {
       try {
         const parsedData = JSON.parse(jsonContent) as FeedData;
-        setFeeds(mapFeedDataToDisplayItems(parsedData));
+        setFeeds(mapFeedDataToDisplayItems(parsedData)); // This will now map discordChannel too
         setRawJsonInput(jsonContent); 
          toast({
           title: "JSON updated",
@@ -161,6 +162,48 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     setIsLoading(false);
     return result;
   };
+
+  const handleUpdateFeedDiscordChannel = async (channelId: string, newDiscordId: string) => {
+    setIsLoading(true);
+    const result = await updateFeedDiscordChannel(channelId, newDiscordId);
+    if (result.success && result.updatedFeedItem) {
+      // Update local feeds state
+      setFeeds(prevFeeds => 
+        prevFeeds.map(feed => 
+          feed.channelId === channelId 
+            ? { ...feed, discordChannel: result.updatedFeedItem!.discordChannel } 
+            : feed
+        )
+      );
+      // Update rawJsonInput state
+      try {
+        const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
+        if (currentJsonData[channelId]) {
+          currentJsonData[channelId].discordChannel = newDiscordId;
+          setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
+        }
+      } catch (e) {
+        console.error("Error updating rawJsonInput after Discord channel update:", e);
+      }
+      toast({
+        title: "Discord Channel Updated",
+        description: `Discord channel for ${result.updatedFeedItem.name} updated.`,
+        action: <CheckCircle className="text-green-500" />,
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: result.message || "Could not update Discord channel.",
+        action: <AlertTriangle className="text-red-500" />,
+      });
+      // Optionally, revert optimistic UI update if any, or refresh data
+      // For now, we rely on the DiscordChannelInput's useEffect to reset if initialValue changes
+      // due to a failed backend update that might trigger a parent data refresh.
+    }
+    setIsLoading(false);
+  };
+
 
   const handleToggleSelectFeed = (feedUrl: string) => {
     setSelectedFeeds(prev =>
@@ -210,16 +253,17 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
             Your YouTube Feeds
           </CardTitle>
           <CardDescription>
-            Manage your list of YouTube feed URLs. Select feeds to delete them.
+            Manage your list of YouTube feed URLs. Select feeds to delete them. You can also edit the Discord Channel ID for each feed directly in the table.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <FeedTable
             feeds={feeds}
-            selectedFeeds={selectedFeeds} // Pass the array of selected URLs
+            selectedFeeds={selectedFeeds} 
             onToggleSelectFeed={handleToggleSelectFeed}
             onToggleSelectAll={handleToggleSelectAll}
             onDeleteSelected={handleDeleteSelectedFeeds}
+            onUpdateFeedDiscordChannel={handleUpdateFeedDiscordChannel} // Pass the handler
             isLoading={isLoading}
           />
         </CardContent>
@@ -235,7 +279,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
               Add New Feed
             </CardTitle>
             <CardDescription>
-              Enter a valid YouTube feed URL to add it to your list. Name and Discord channel can be edited in the raw JSON editor.
+              Enter a valid YouTube feed URL to add it to your list. Name and Discord channel can be edited in the raw JSON editor or directly in the table.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -2,11 +2,46 @@
 'use client';
 
 import type { FC } from 'react';
+import { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Trash2 } from 'lucide-react';
 import type { DisplayFeedItem } from '@/types';
+
+interface DiscordChannelInputProps {
+  initialValue: string;
+  channelId: string;
+  onSave: (channelId: string, newValue: string) => Promise<void>;
+  disabled: boolean;
+}
+
+const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, channelId, onSave, disabled }) => {
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+
+  const handleBlur = async () => {
+    if (value !== initialValue) {
+      await onSave(channelId, value);
+    }
+  };
+
+  return (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleBlur}
+      disabled={disabled}
+      className="text-sm h-8" // Keep input compact
+      placeholder="Discord Channel ID"
+    />
+  );
+};
+
 
 interface FeedTableProps {
   feeds: DisplayFeedItem[];
@@ -14,6 +49,7 @@ interface FeedTableProps {
   onToggleSelectFeed: (feedUrl: string) => void;
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
+  onUpdateFeedDiscordChannel: (channelId: string, newDiscordId: string) => Promise<void>; // New prop
   isLoading: boolean;
 }
 
@@ -23,6 +59,7 @@ export const FeedTable: FC<FeedTableProps> = ({
   onToggleSelectFeed,
   onToggleSelectAll,
   onDeleteSelected,
+  onUpdateFeedDiscordChannel,
   isLoading,
 }) => {
   const allSelected = feeds.length > 0 && selectedFeeds.length === feeds.length;
@@ -62,12 +99,13 @@ export const FeedTable: FC<FeedTableProps> = ({
               <TableHead className="w-[50px]"></TableHead>
               <TableHead>Channel Name</TableHead>
               <TableHead>Feed URL</TableHead>
+              <TableHead>Discord Channel ID</TableHead> 
             </TableRow>
           </TableHeader>
           <TableBody>
             {feeds.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="h-24 text-center">
+                <TableCell colSpan={4} className="h-24 text-center">
                   No feeds yet. Add some feeds to get started.
                 </TableCell>
               </TableRow>
@@ -90,6 +128,14 @@ export const FeedTable: FC<FeedTableProps> = ({
                   </TableCell>
                   <TableCell className="font-medium truncate max-w-sm"> 
                     {feedItem.url}
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    <DiscordChannelInput
+                      initialValue={feedItem.discordChannel}
+                      channelId={feedItem.channelId}
+                      onSave={onUpdateFeedDiscordChannel}
+                      disabled={isLoading}
+                    />
                   </TableCell>
                 </TableRow>
               ))
