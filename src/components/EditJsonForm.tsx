@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Save } from 'lucide-react';
 import { useEffect } from "react";
@@ -41,7 +41,7 @@ const editJsonFormSchema = z.object({
       } catch (e) {
         return false;
       }
-    }, { message: "Invalid JSON. Must be an object like { \"channelId1\": { \"name\": \"Name\", \"discordChannel\": \"id\" }, ... }." }),
+    }, { message: "Invalid JSON. Must be an object where each key is a YouTube Channel ID, and the value is an object with 'name' (string) and 'discordChannel' (string) properties." }),
 });
 
 type EditJsonFormValues = z.infer<typeof editJsonFormSchema>;
@@ -80,10 +80,16 @@ export function EditJsonForm({ initialJsonContent, onUpdateJson, isLoading }: Ed
           render={({ field }) => (
             <FormItem>
               <FormLabel>feed.json Content</FormLabel>
+              <FormDescription>
+                The JSON file should be an object. Each key must be a unique YouTube Channel ID (e.g., "UCxxxxxxxxxxxx").
+                The value for each key must be an object with two string properties:
+                <code className="block bg-muted p-1 rounded text-xs my-1">"name": "Your Channel Display Name"</code>
+                <code className="block bg-muted p-1 rounded text-xs my-1">"discordChannel": "Your Discord Channel ID for notifications"</code>
+              </FormDescription>
               <FormControl>
                 <Textarea
-                  placeholder='{\n  "UCxxxxxxxxxxxx": { "name": "Channel Name", "discordChannel": "123456789" }\n}'
-                  className="min-h-[200px] font-mono text-sm"
+                  placeholder='{\n  "UCxxxxxxxxxxxx": { "name": "Channel Name", "discordChannel": "123456789012345678" },\n  "UCyyyyyyyyyyyy": { "name": "Another Channel", "discordChannel": "876543210987654321" }\n}'
+                  className="min-h-[200px] font-mono text-sm mt-2"
                   {...field}
                   disabled={isLoading}
                 />
