@@ -1,22 +1,18 @@
 
 'use server';
 
-import fs from 'fs/promises';
-import path from 'path';
 import type { FeedData, FeedChannelInfo, DisplayFeedItem } from '@/types';
 import { simplifyFeeds as callSimplifyFeedsAI, type SimplifyFeedsOutput } from '@/ai/flows/simplify-feeds';
+import { getRepoFileContent, updateRepoFileContent } from './github-service';
 
-const feedFilePath = path.join(process.cwd(), 'feed.json');
-
+// Helper function from original file
 function extractChannelIdFromUrl(url: string): string | null {
   try {
     const parsedUrl = new URL(url);
     if (parsedUrl.hostname === 'www.youtube.com' && parsedUrl.pathname === '/feeds/videos.xml') {
       return parsedUrl.searchParams.get('channel_id');
     }
-  } catch (e) {
-    // Invalid URL
-  }
+  } catch (e) { /* Invalid URL */ }
   return null;
 }
 
@@ -24,59 +20,49 @@ function constructFeedUrl(channelId: string): string {
   return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
 }
 
-async function readFeedFile(): Promise<FeedData> {
+
+async function readFeedDataFromGitHub(): Promise<{ data: FeedData; sha: string | null }> {
   try {
-    const data = await fs.readFile(feedFilePath, 'utf-8');
-    const jsonData = JSON.parse(data) as FeedData;
-    if (typeof jsonData === 'object' && jsonData !== null && !Array.isArray(jsonData)) {
-        for (const key in jsonData) {
-            if (typeof jsonData[key] !== 'object' || jsonData[key] === null ||
-                typeof (jsonData[key] as FeedChannelInfo).name !== 'string' ||
-                typeof (jsonData[key] as FeedChannelInfo).discordChannel !== 'string') {
-                console.warn('Invalid channel entry in feed.json, returning empty data for specific key or all.');
-                // Decide if to return {} or filter out invalid entries
-                return {}; // Returning empty on any invalid entry for safety
-            }
-        }
-        return jsonData;
-    }
-    console.warn('feed.json is not in the expected object format, returning empty data.');
-    return {};
+    const { data, sha } = await getRepoFileContent();
+    return { data, sha };
   } catch (error) {
-    console.warn('Error reading or parsing feed.json, returning empty data:', error);
-    return {};
+    console.error('Failed to read feed data from GitHub:', error);
+    // Return empty data and no SHA if there's an error to prevent app from crashing
+    // Components should ideally handle this (e.g. show error message)
+    return { data: {}, sha: null };
   }
 }
 
-async function writeFeedFile(data: FeedData): Promise<void> {
+async function writeFeedDataToGitHub(data: FeedData, sha: string | null, commitMessage: string): Promise<{success: boolean, message?:string}> {
   try {
-    await fs.writeFile(feedFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    const jsonContent = JSON.stringify(data, null, 2);
+    return await updateRepoFileContent(jsonContent, commitMessage, sha);
   } catch (error) {
-    console.error('Error writing feed.json:', error);
-    throw new Error('Failed to update feed data.');
+    console.error('Failed to write feed data to GitHub:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update feed data in repository.';
+    return {success: false, message};
   }
 }
 
 export async function getFeeds(): Promise<DisplayFeedItem[]> {
-  const data = await readFeedFile();
+  const { data } = await readFeedDataFromGitHub();
   return Object.entries(data).map(([channelId, info]) => ({
     channelId,
     url: constructFeedUrl(channelId),
     name: info.name,
-    discordChannel: info.discordChannel, // Include discordChannel
+    discordChannel: info.discordChannel,
   }));
 }
 
 export async function getRawJson(): Promise<string> {
   try {
-    const data = await fs.readFile(feedFilePath, 'utf-8');
-    // Ensure it's valid JSON before returning
-    JSON.parse(data); 
-    if (data.trim() === "") return "{}"; // Handle empty file case
-    return data;
+    const { rawContent } = await getRepoFileContent();
+    // Ensure it's valid JSON before returning, or at least not empty if it's supposed to be JSON
+    // The github-service already handles parsing and returns "{}" on error/empty
+    return rawContent;
   } catch (error) {
-    // If file doesn't exist or is invalid JSON, return an empty object string
-    return "{}";
+    console.error('Failed to get raw JSON from GitHub:', error);
+    return "{}"; // Fallback to empty object string
   }
 }
 
@@ -89,60 +75,88 @@ export async function addFeed(url: string): Promise<{ success: boolean; message?
     return { success: false, message: 'Could not extract channel ID from URL.' };
   }
 
-  const currentData = await readFeedFile();
+  const { data: currentData, sha } = await readFeedDataFromGitHub();
   if (currentData[channelId]) {
     return { success: false, message: 'Feed for this channel ID already exists.' };
   }
 
   const newChannelName = "New Channel (please edit)";
-  const defaultDiscordChannel = "default_discord_id";
+  const defaultDiscordChannel = "default_discord_id"; // Consider making this configurable or an empty string
   currentData[channelId] = {
     name: newChannelName,
-    discordChannel: defaultDiscordChannel 
+    discordChannel: defaultDiscordChannel,
   };
 
-  await writeFeedFile(currentData);
-  return { success: true, newFeedItem: { channelId, url, name: newChannelName, discordChannel: defaultDiscordChannel } };
+  const commitMessage = `feat: Add YouTube feed for ${newChannelName} (ID: ${channelId})`;
+  const writeResult = await writeFeedDataToGitHub(currentData, sha, commitMessage);
+  if (!writeResult.success) {
+    return { success: false, message: writeResult.message || 'Failed to save new feed to repository.' };
+  }
+
+  return { 
+    success: true, 
+    newFeedItem: { 
+      channelId, 
+      url, 
+      name: newChannelName, 
+      discordChannel: defaultDiscordChannel 
+    } 
+  };
 }
 
 export async function deleteFeeds(urlsToDelete: string[]): Promise<{ success: boolean; message?: string }> {
-  const currentData = await readFeedFile();
+  const { data: currentData, sha } = await readFeedDataFromGitHub();
   let changed = false;
+  const deletedChannelNames: string[] = [];
+
   for (const url of urlsToDelete) {
     const channelId = extractChannelIdFromUrl(url);
     if (channelId && currentData[channelId]) {
+      deletedChannelNames.push(currentData[channelId].name);
       delete currentData[channelId];
       changed = true;
     }
   }
+
   if (changed) {
-    await writeFeedFile(currentData);
+    const commitMessage = `feat: Delete YouTube feed(s): ${deletedChannelNames.join(', ') || urlsToDelete.length + ' item(s)'}`;
+    const writeResult = await writeFeedDataToGitHub(currentData, sha, commitMessage);
+     if (!writeResult.success) {
+      return { success: false, message: writeResult.message || 'Failed to save deletions to repository.' };
+    }
   }
   return { success: true };
 }
 
 export async function updateRawJson(jsonContent: string): Promise<{ success: boolean; message?: string }> {
+  let parsedData: FeedData;
   try {
-    const parsedData = JSON.parse(jsonContent);
+    parsedData = JSON.parse(jsonContent);
     if (typeof parsedData !== 'object' || parsedData === null || Array.isArray(parsedData)) {
       return { success: false, message: 'Invalid JSON structure. Must be an object.' };
     }
     for (const key in parsedData) {
-        const entry = parsedData[key] as FeedChannelInfo;
-        if (typeof entry !== 'object' || entry === null ||
-            typeof entry.name !== 'string' ||
-            typeof entry.discordChannel !== 'string') {
+      const entry = parsedData[key] as FeedChannelInfo;
+      if (typeof entry !== 'object' || entry === null ||
+          typeof entry.name !== 'string' ||
+          typeof entry.discordChannel !== 'string') {
         return { success: false, message: `Invalid structure for channel ID "${key}". Each entry must be an object with "name" (string) and "discordChannel" (string).` };
-        }
+      }
     }
-    await writeFeedFile(parsedData as FeedData);
-    return { success: true };
   } catch (error) {
-    // Check if error is an instance of Error to access message property
     const errorMessage = error instanceof Error ? error.message : 'Invalid JSON content. Could not parse.';
-    console.error('Error updating raw JSON:', error);
     return { success: false, message: errorMessage };
   }
+  
+  // Fetch current SHA to ensure we are updating the latest version
+  const { sha: currentSha } = await readFeedDataFromGitHub();
+  const commitMessage = 'feat: Update feed.json content via raw editor';
+  const writeResult = await writeFeedDataToGitHub(parsedData, currentSha, commitMessage);
+
+  if (!writeResult.success) {
+    return { success: false, message: writeResult.message || 'Failed to save updated JSON to repository.' };
+  }
+  return { success: true };
 }
 
 export async function simplifyFeeds(feedUrls: string[]): Promise<SimplifyFeedsOutput> {
@@ -163,24 +177,26 @@ export async function updateFeedDiscordChannel(channelId: string, newDiscordChan
     return { success: false, message: 'Invalid input for updating Discord channel.' };
   }
 
-  const currentData = await readFeedFile();
+  const { data: currentData, sha } = await readFeedDataFromGitHub();
   if (!currentData[channelId]) {
     return { success: false, message: 'Feed not found for the given channel ID.' };
   }
 
+  const oldChannelName = currentData[channelId].name;
   currentData[channelId].discordChannel = newDiscordChannelId;
 
-  try {
-    await writeFeedFile(currentData);
-    const updatedFeedItem: DisplayFeedItem = {
-      channelId,
-      url: constructFeedUrl(channelId),
-      name: currentData[channelId].name,
-      discordChannel: newDiscordChannelId,
-    };
-    return { success: true, updatedFeedItem };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update feed data.';
-    return { success: false, message: errorMessage };
+  const commitMessage = `feat: Update Discord channel for ${oldChannelName} (ID: ${channelId})`;
+  const writeResult = await writeFeedDataToGitHub(currentData, sha, commitMessage);
+
+  if (!writeResult.success) {
+    return { success: false, message: writeResult.message || 'Failed to save Discord channel update to repository.' };
   }
+
+  const updatedFeedItem: DisplayFeedItem = {
+    channelId,
+    url: constructFeedUrl(channelId),
+    name: currentData[channelId].name,
+    discordChannel: newDiscordChannelId,
+  };
+  return { success: true, updatedFeedItem };
 }
