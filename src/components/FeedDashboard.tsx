@@ -2,17 +2,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { addFeed, deleteFeeds, updateRawJson, simplifyFeeds as simplifyFeedsAction, updateFeedDiscordChannel } from '@/lib/feed-actions';
+import { addFeed, deleteFeeds, updateRawJson, updateFeedDiscordChannel } from '@/lib/feed-actions';
 import { FeedTable } from './FeedTable';
 import { AddFeedForm } from './AddFeedForm';
 import { EditJsonForm } from './EditJsonForm';
-import { FeedSimplifierSection } from './FeedSimplifierSection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListChecks, PlusCircle, Edit3, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import type { SimplifyFeedsOutput, FeedData, DisplayFeedItem } from '@/types';
+import type { FeedData, DisplayFeedItem } from '@/types';
 
 function extractChannelIdFromUrl(url: string): string | null {
   try {
@@ -219,31 +218,6 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     }
   };
 
-  const handleSimplifyFeeds = async (): Promise<SimplifyFeedsOutput> => {
-    setIsLoading(true);
-    const urlsToSimplify = feeds.map(f => f.url);
-    try {
-      const result = await simplifyFeedsAction(urlsToSimplify);
-      toast({
-        title: "Analysis Complete",
-        description: "Feed simplification suggestions are ready.",
-        action: <CheckCircle className="text-green-500" />,
-      });
-      return result;
-    } catch (error) {
-       toast({
-        variant: "destructive",
-        title: "Simplification Failed",
-        description: "Could not get simplification suggestions.",
-        action: <AlertTriangle className="text-red-500" />,
-      });
-      return { suggestions: ['Error: Could not process simplification.'] };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-
   return (
     <div className="space-y-8">
       <Card className="shadow-lg">
@@ -302,10 +276,6 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
           </CardContent>
         </Card>
       </div>
-      
-      <Separator />
-
-      <FeedSimplifierSection feeds={feeds.map(f => f.url)} onSimplifyFeeds={() => handleSimplifyFeeds()} />
       
       <Toaster />
       {isLoading && (

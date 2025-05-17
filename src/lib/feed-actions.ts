@@ -2,7 +2,6 @@
 'use server';
 
 import type { FeedData, FeedChannelInfo, DisplayFeedItem } from '@/types';
-import { simplifyFeeds as callSimplifyFeedsAI, type SimplifyFeedsOutput } from '@/ai/flows/simplify-feeds';
 import { getRepoFileContent, updateRepoFileContent } from './github-service';
 
 // Helper function from original file
@@ -157,19 +156,6 @@ export async function updateRawJson(jsonContent: string): Promise<{ success: boo
     return { success: false, message: writeResult.message || 'Failed to save updated JSON to repository.' };
   }
   return { success: true };
-}
-
-export async function simplifyFeeds(feedUrls: string[]): Promise<SimplifyFeedsOutput> {
-  if (!feedUrls || feedUrls.length === 0) {
-    return { suggestions: ['No feed URLs provided to simplify.'] };
-  }
-  try {
-    const result = await callSimplifyFeedsAI({ feedUrls });
-    return result;
-  } catch (error) {
-    console.error('Error simplifying feeds:', error);
-    return { suggestions: ['An error occurred while simplifying feeds.'] };
-  }
 }
 
 export async function updateFeedDiscordChannel(channelId: string, newDiscordChannelId: string): Promise<{ success: boolean; message?: string; updatedFeedItem?: DisplayFeedItem }> {

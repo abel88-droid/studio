@@ -14,8 +14,3 @@ export interface DisplayFeedItem {
   name: string;
   discordChannel: string; // Added discordChannel
 }
-
-export interface FeedSimplificationSuggestion {
-  id: string; // Or some unique identifier
-  suggestion: string;
-}
