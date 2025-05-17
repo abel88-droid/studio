@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,58 +12,68 @@ import { ListChecks, PlusCircle, Edit3, AlertTriangle, CheckCircle, Loader2 } fr
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import type { SimplifyFeedsOutput } from '@/ai/flows/simplify-feeds';
+import type { SimplifyFeedsOutput, FeedData, FeedChannelInfo } from '@/ai/flows/simplify-feeds'; // Assuming SimplifyFeedsOutput is also in types or ai/flows
+
+// Helper functions (can be moved to a utils file if used elsewhere)
+function extractChannelIdFromUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'www.youtube.com' && parsedUrl.pathname === '/feeds/videos.xml') {
+      return parsedUrl.searchParams.get('channel_id');
+    }
+  } catch (e) { /* Invalid URL */ }
+  return null;
+}
+
+function constructFeedUrl(channelId: string): string {
+  return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+}
+
+function getUrlsFromFeedData(feedData: FeedData): string[] {
+  return Object.keys(feedData).map(constructFeedUrl);
+}
 
 interface FeedDashboardProps {
-  initialFeeds: string[];
+  initialFeeds: string[]; // This will now be derived from initialRawJson on client
   initialRawJson: string;
 }
 
-export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardProps) {
-  const [feeds, setFeeds] = useState<string[]>(initialFeeds);
+export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson }: FeedDashboardProps) {
+  const [feeds, setFeeds] = useState<string[]>([]);
   const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]);
   const [rawJsonInput, setRawJsonInput] = useState<string>(initialRawJson);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const refreshFeedsAndJson = useCallback(async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    // Initialize feeds from initialRawJson, as initialFeeds prop might be stale if JSON changes often
     try {
-      // In a real app, you'd re-fetch from the server actions
-      // For now, we assume server actions update the source and then we can re-initialize state
-      // or better, the actions would return the new state.
-      // This is simplified due to local file system interaction.
-      // We will rely on optimistic updates and explicit calls for now.
-      // const updatedFeeds = await getFeeds(); // Not strictly needed if actions return new state
-      // const updatedRawJson = await getRawJson();
-      // setFeeds(updatedFeeds);
-      // setRawJsonInput(updatedRawJson);
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error refreshing data",
-        description: "Could not reload feed data.",
-      });
-    } finally {
-      setIsLoading(false);
+      const parsedJson = JSON.parse(initialRawJson) as FeedData;
+      setFeeds(getUrlsFromFeedData(parsedJson));
+    } catch (e) {
+      console.error("Failed to parse initialRawJson for feeds", e);
+      setFeeds(serverInitialFeeds); // Fallback to serverInitialFeeds if parsing fails
     }
-  }, [toast]);
-
-  useEffect(() => {
-    setFeeds(initialFeeds);
-  }, [initialFeeds]);
-
-  useEffect(() => {
     setRawJsonInput(initialRawJson);
-  }, [initialRawJson]);
+  }, [initialRawJson, serverInitialFeeds]);
 
 
   const handleAddFeed = async (url: string) => {
     setIsLoading(true);
     const result = await addFeed(url);
     if (result.success) {
-      setFeeds(prev => [...prev, url]);
-      setRawJsonInput(prev => JSON.stringify({ feeds: [...JSON.parse(prev).feeds, url] }, null, 2));
+      const channelId = extractChannelIdFromUrl(url);
+      if (channelId) {
+        setFeeds(prev => [...prev, url]); // Optimistic update for the URL list
+        try {
+            const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
+            currentJsonData[channelId] = { name: "New Channel (please edit)", discordChannel: "default_discord_id" };
+            setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
+        } catch (e) {
+            console.error("Error updating rawJsonInput after add:", e);
+            // Potentially re-fetch raw JSON here if local update fails
+        }
+      }
       toast({
         title: "Feed added",
         description: "The new feed URL has been successfully added.",
@@ -86,8 +97,21 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
     const result = await deleteFeeds(selectedFeeds);
     if (result.success) {
       const newFeeds = feeds.filter(feed => !selectedFeeds.includes(feed));
-      setFeeds(newFeeds);
-      setRawJsonInput(JSON.stringify({ feeds: newFeeds }, null, 2));
+      setFeeds(newFeeds); // Optimistic update for the URL list
+
+      try {
+        const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
+        selectedFeeds.forEach(url => {
+          const channelId = extractChannelIdFromUrl(url);
+          if (channelId && currentJsonData[channelId]) {
+            delete currentJsonData[channelId];
+          }
+        });
+        setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
+      } catch (e) {
+        console.error("Error updating rawJsonInput after delete:", e);
+         // Potentially re-fetch raw JSON here
+      }
       setSelectedFeeds([]);
       toast({
         title: "Feeds deleted",
@@ -110,9 +134,9 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
     const result = await updateRawJson(jsonContent);
     if (result.success) {
       try {
-        const parsedData = JSON.parse(jsonContent);
-        setFeeds(parsedData.feeds);
-        setRawJsonInput(jsonContent); // Keep user's formatting if valid
+        const parsedData = JSON.parse(jsonContent) as FeedData;
+        setFeeds(getUrlsFromFeedData(parsedData)); // Derive URLs from the new JSON
+        setRawJsonInput(jsonContent); 
          toast({
           title: "JSON updated",
           description: "The feed.json content has been successfully updated.",
@@ -122,7 +146,7 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
          toast({
           variant: "destructive",
           title: "JSON parsing error after save",
-          description: "The JSON was saved but could not be parsed locally.",
+          description: "The JSON was saved but could not be parsed locally to update the feed list.",
           action: <AlertTriangle className="text-red-500" />,
         });
       }
@@ -148,14 +172,15 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
     if (selectedFeeds.length === feeds.length) {
       setSelectedFeeds([]);
     } else {
-      setSelectedFeeds(feeds.slice()); // Select all
+      setSelectedFeeds(feeds.slice()); 
     }
   };
 
-  const handleSimplifyFeeds = async (feedUrls: string[]): Promise<SimplifyFeedsOutput> => {
+  const handleSimplifyFeeds = async (feedUrlsToSimplify: string[]): Promise<SimplifyFeedsOutput> => {
     setIsLoading(true);
     try {
-      const result = await simplifyFeedsAction(feedUrls);
+      // Ensure we pass the current list of URLs from the state
+      const result = await simplifyFeedsAction(feedUrlsToSimplify.length > 0 ? feedUrlsToSimplify : feeds);
       toast({
         title: "Analysis Complete",
         description: "Feed simplification suggestions are ready.",
@@ -210,7 +235,7 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
               Add New Feed
             </CardTitle>
             <CardDescription>
-              Enter a valid YouTube feed URL to add it to your list.
+              Enter a valid YouTube feed URL to add it to your list. Name and Discord channel can be edited in the raw JSON editor.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -236,7 +261,7 @@ export function FeedDashboard({ initialFeeds, initialRawJson }: FeedDashboardPro
       
       <Separator />
 
-      <FeedSimplifierSection feeds={feeds} onSimplifyFeeds={handleSimplifyFeeds} />
+      <FeedSimplifierSection feeds={feeds} onSimplifyFeeds={() => handleSimplifyFeeds(feeds)} />
       
       <Toaster />
       {isLoading && (

@@ -1,6 +1,11 @@
 
+export interface FeedChannelInfo {
+  discordChannel: string;
+  name: string;
+}
+
 export interface FeedData {
-  feeds: string[];
+  [channelId: string]: FeedChannelInfo;
 }
 
 export interface FeedSimplificationSuggestion {

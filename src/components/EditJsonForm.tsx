@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,17 +9,39 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Save } from 'lucide-react';
 import { useEffect } from "react";
+import type { FeedChannelInfo } from "@/types";
 
 const editJsonFormSchema = z.object({
   jsonContent: z.string().min(1, { message: "JSON content cannot be empty." })
     .refine(value => {
       try {
         const parsed = JSON.parse(value);
-        return typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.feeds) && parsed.feeds.every((item: any) => typeof item === 'string');
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          return false;
+        }
+        // Allow empty object
+        if (Object.keys(parsed).length === 0) {
+            return true;
+        }
+        for (const key in parsed) {
+          // Key should be a valid channel ID (basic check, can be improved)
+          if (!/^[a-zA-Z0-9_-]{24}$/.test(key) && !key.startsWith('UC')) { 
+            // console.warn(`Invalid key format for channel ID: ${key}`);
+            // Relaxing this check as user might have different ID formats.
+            // Main check is on the value structure.
+          }
+          const channelInfo = parsed[key] as FeedChannelInfo;
+          if (typeof channelInfo !== 'object' || channelInfo === null ||
+              typeof channelInfo.discordChannel !== 'string' ||
+              typeof channelInfo.name !== 'string') {
+            return false;
+          }
+        }
+        return true;
       } catch (e) {
         return false;
       }
-    }, { message: "Invalid JSON structure. Must be { \"feeds\": [\"url1\", ...] } and all feeds must be strings." }),
+    }, { message: "Invalid JSON. Must be an object like { \"channelId1\": { \"name\": \"Name\", \"discordChannel\": \"id\" }, ... }." }),
 });
 
 type EditJsonFormValues = z.infer<typeof editJsonFormSchema>;
@@ -59,7 +82,7 @@ export function EditJsonForm({ initialJsonContent, onUpdateJson, isLoading }: Ed
               <FormLabel>feed.json Content</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder='{ "feeds": ["url1", "url2"] }'
+                  placeholder='{\n  "UCxxxxxxxxxxxx": { "name": "Channel Name", "discordChannel": "123456789" }\n}'
                   className="min-h-[200px] font-mono text-sm"
                   {...field}
                   disabled={isLoading}
