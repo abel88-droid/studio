@@ -11,9 +11,9 @@ import { Trash2 } from 'lucide-react';
 import type { DisplayFeedItem } from '@/types';
 
 interface DiscordChannelInputProps {
-  initialValue: string;
+  initialValue: string; // This will be the raw numeric ID
   channelId: string;
-  onSave: (channelId: string, newValue: string) => Promise<void>;
+  onSave: (channelId: string, newValue: string) => Promise<void>; // newValue is the string from input
   disabled: boolean;
 }
 
@@ -21,10 +21,14 @@ const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, chann
   const [value, setValue] = useState(initialValue);
 
   useEffect(() => {
+    // When initialValue (raw ID from server) changes, update the input field's display value.
+    // This ensures the input reflects the actual stored data.
     setValue(initialValue);
   }, [initialValue]);
 
   const handleBlur = async () => {
+    // Only save if the typed value is different from the initial raw ID.
+    // The server will parse and validate the format.
     if (value !== initialValue) {
       await onSave(channelId, value);
     }
@@ -36,8 +40,8 @@ const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, chann
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleBlur}
       disabled={disabled}
-      className="text-sm h-8" // Keep input compact
-      placeholder="Discord Channel ID"
+      className="text-sm h-8"
+      placeholder="#name-ID or raw ID" // Updated placeholder
     />
   );
 };
@@ -49,7 +53,7 @@ interface FeedTableProps {
   onToggleSelectFeed: (feedUrl: string) => void;
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
-  onUpdateFeedDiscordChannel: (channelId: string, newDiscordId: string) => Promise<void>; // New prop
+  onUpdateFeedDiscordChannel: (channelId: string, newDiscordIdInput: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -99,7 +103,7 @@ export const FeedTable: FC<FeedTableProps> = ({
               <TableHead className="w-[50px]"></TableHead>
               <TableHead>Channel Name</TableHead>
               <TableHead>Feed URL</TableHead>
-              <TableHead>Discord Channel ID</TableHead> 
+              <TableHead className="min-w-[250px]">Discord Channel (#name-ID or ID)</TableHead> 
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -129,7 +133,7 @@ export const FeedTable: FC<FeedTableProps> = ({
                   <TableCell className="font-medium truncate max-w-sm"> 
                     {feedItem.url}
                   </TableCell>
-                  <TableCell className="max-w-[200px]">
+                  <TableCell className="max-w-[250px]">
                     <DiscordChannelInput
                       initialValue={feedItem.discordChannel}
                       channelId={feedItem.channelId}
@@ -146,3 +150,4 @@ export const FeedTable: FC<FeedTableProps> = ({
     </div>
   );
 };
+

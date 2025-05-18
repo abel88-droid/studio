@@ -195,7 +195,7 @@ export async function addFeed(userInputUrl: string): Promise<{ success: boolean;
   }
 
   const newChannelName = fetchedChannelName || "New Channel (edit name)";
-  const defaultDiscordChannel = "default_discord_id"; 
+  const defaultDiscordChannel = "0"; // Default to a placeholder raw ID
 
   currentData[channelId] = {
     name: newChannelName,
@@ -261,8 +261,12 @@ export async function updateRawJson(jsonContent: string): Promise<{ success: boo
       const entry = parsedData[key] as FeedChannelInfo;
       if (typeof entry !== 'object' || entry === null ||
           typeof entry.name !== 'string' ||
-          typeof entry.discordChannel !== 'string') {
-        return { success: false, message: `Invalid structure for channel ID "${key}". Each entry must be an object with "name" (string) and "discordChannel" (string).` };
+          typeof entry.discordChannel !== 'string') { // discordChannel is raw ID string
+        return { success: false, message: `Invalid structure for channel ID "${key}". Each entry must be an object with "name" (string) and "discordChannel" (string ID).` };
+      }
+      // Validate discordChannel is a numeric string if needed, e.g. /^\d+$/.test(entry.discordChannel)
+      if (!/^\d+$/.test(entry.discordChannel) && entry.discordChannel !== "0") { // "0" for default/unset
+         return { success: false, message: `Invalid discordChannel for channel ID "${key}". Must be a numeric string.` };
       }
     }
   } catch (error) {
@@ -280,12 +284,27 @@ export async function updateRawJson(jsonContent: string): Promise<{ success: boo
   return { success: true };
 }
 
-export async function updateFeedDiscordChannel(channelId: string, newDiscordChannelId: string): Promise<{ success: boolean; message?: string; updatedFeedItem?: DisplayFeedItem }> {
-  if (!channelId || typeof newDiscordChannelId !== 'string') {
+export async function updateFeedDiscordChannel(channelId: string, newDiscordChannelInput: string): Promise<{ success: boolean; message?: string; updatedFeedItem?: DisplayFeedItem }> {
+  if (!channelId || typeof newDiscordChannelInput !== 'string') {
     return { success: false, message: 'Invalid input for updating Discord channel.' };
   }
   if (!/^UC[\w-]{22}$/.test(channelId)) {
     return { success: false, message: `Invalid Channel ID format for update: "${channelId}".` };
+  }
+
+  const discordChannelPattern = /^#([a-zA-Z0-9_-]+)-(\d{17,19})$/;
+  const trimmedInput = newDiscordChannelInput.trim();
+  const match = trimmedInput.match(discordChannelPattern);
+
+  let extractedDiscordId: string;
+
+  if (trimmedInput === "0" || /^\d{17,19}$/.test(trimmedInput)) {
+    // Allow direct input of raw ID or "0"
+    extractedDiscordId = trimmedInput;
+  } else if (match) {
+    extractedDiscordId = match[2];
+  } else {
+    return { success: false, message: 'Invalid Discord channel format. Expected #name-ID (e.g., #general-1234567890123456789) or a raw numeric ID.' };
   }
 
   const { data: currentData, sha } = await readFeedDataFromGitHub();
@@ -294,7 +313,7 @@ export async function updateFeedDiscordChannel(channelId: string, newDiscordChan
   }
 
   const oldChannelName = currentData[channelId].name;
-  currentData[channelId].discordChannel = newDiscordChannelId;
+  currentData[channelId].discordChannel = extractedDiscordId; // Save the extracted raw ID
 
   const commitMessage = `feat: Update Discord channel for ${oldChannelName} (ID: ${channelId})`;
   const writeResult = await writeFeedDataToGitHub(currentData, sha, commitMessage);
@@ -307,7 +326,7 @@ export async function updateFeedDiscordChannel(channelId: string, newDiscordChan
     channelId,
     url: constructFeedUrl(channelId),
     name: currentData[channelId].name,
-    discordChannel: newDiscordChannelId,
+    discordChannel: extractedDiscordId, // Return the raw ID
   };
   return { success: true, updatedFeedItem };
 }
