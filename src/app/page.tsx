@@ -18,12 +18,11 @@ export default async function HomePage() {
     <div className="container mx-auto min-h-screen p-4 py-8 md:p-8">
       <header className="mb-12 flex flex-col items-center text-center">
         <Image
-          src="https://placehold.co/400x150.png"
+          src="/dc-dashboard-logo.png"
           alt="DC dashboard dragon logo"
-          width={400}
-          height={150}
+          width={250}
+          height={250}
           className="rounded-md shadow-lg mb-6"
-          data-ai-hint="dragon logo text"
           priority
         />
         <p className="text-lg text-muted-foreground">
