@@ -8,7 +8,7 @@ import { getRepoFileContent, updateRepoFileContent } from './github-service';
 function extractChannelIdFromXmlFeedUrl(url: string): string | null {
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.hostname === 'www.youtube.com' && parsedUrl.pathname === '/feeds/videos.xml') {
+    if (parsedUrl.hostname.toLowerCase().includes('youtube.com') && parsedUrl.pathname.toLowerCase() === '/feeds/videos.xml') {
       return parsedUrl.searchParams.get('channel_id');
     }
   } catch (e) { /* Invalid URL */ }
@@ -22,16 +22,10 @@ function constructFeedUrl(channelId: string): string {
 
 // New helper function to fetch channel details from a YouTube page URL
 async function fetchChannelDetailsFromPage(pageUrl: string): Promise<{ channelId: string; channelName?: string } | null> {
-  // Check if the URL itself is a direct /channel/UC... URL
-  const directChannelMatch = pageUrl.match(/youtube\.com\/channel\/(UC[\w-]{22})/);
-  if (directChannelMatch && directChannelMatch[1]) {
-    // If it's a direct ID, we can use it. We'll still try to fetch the page for the name.
-    // To avoid an extra fetch if we only need the ID, this part could be refactored,
-    // but for now, fetching the page for the name is acceptable.
-  }
+  const normalizedPageUrl = pageUrl.toLowerCase().startsWith('http') ? pageUrl : `https://${pageUrl}`;
 
   try {
-    const response = await fetch(pageUrl, {
+    const response = await fetch(normalizedPageUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
@@ -39,7 +33,7 @@ async function fetchChannelDetailsFromPage(pageUrl: string): Promise<{ channelId
     });
 
     if (!response.ok) {
-      console.error(`Failed to fetch YouTube page ${pageUrl}: ${response.status}`);
+      console.error(`Failed to fetch YouTube page ${normalizedPageUrl}: ${response.status}`);
       return null;
     }
     const html = await response.text();
@@ -69,14 +63,13 @@ async function fetchChannelDetailsFromPage(pageUrl: string): Promise<{ channelId
         match = html.match(/"channelId":"(UC[\w-]{22})"/);
         if (match && match[1]) channelId = match[1];
     }
-    // 5. Fallback: browseId (can be less reliable, as other elements might have browseIds)
-    // This is a last resort and might need more context if it picks up wrong IDs.
+    // 5. Fallback: browseId (can be less reliable)
     if (!channelId) {
       match = html.match(/"browseId":"(UC[\w-]{22})"/);
       if (match && match[1]) {
-        // Basic check: if the page title contains "channel", it's more likely the correct browseId
         const titleMatchForBrowseId = html.match(/<title>[^<]*channel[^<]*<\/title>/i);
-        if (titleMatchForBrowseId || directChannelMatch) { // if it was a /channel/ URL, this browseID is likely correct
+        const isDirectChannelUrl = normalizedPageUrl.includes('/channel/UC');
+        if (titleMatchForBrowseId || isDirectChannelUrl) {
              channelId = match[1];
         }
       }
@@ -88,7 +81,7 @@ async function fetchChannelDetailsFromPage(pageUrl: string): Promise<{ channelId
       if (match && match[1]) {
         channelName = match[1].trim();
       } else {
-        match = html.match(/<title>([^<]+)\s*-\s*YouTube<\/title>/i); // Made case-insensitive and flexible on spacing
+        match = html.match(/<title>([^<]+)\s*-\s*YouTube<\/title>/i); 
         if (match && match[1]) {
           channelName = match[1].trim();
         }
@@ -99,10 +92,10 @@ async function fetchChannelDetailsFromPage(pageUrl: string): Promise<{ channelId
       return { channelId, channelName };
     }
 
-    console.warn(`Could not extract channel ID from HTML of ${pageUrl} using common patterns.`);
+    console.warn(`Could not extract channel ID from HTML of ${normalizedPageUrl} using common patterns.`);
     return null;
   } catch (error) {
-    console.error(`Error fetching or parsing YouTube page URL ${pageUrl}:`, error);
+    console.error(`Error fetching or parsing YouTube page URL ${normalizedPageUrl}:`, error);
     return null;
   }
 }
@@ -149,32 +142,50 @@ export async function getRawJson(): Promise<string> {
   }
 }
 
-export async function addFeed(url: string): Promise<{ success: boolean; message?: string; newFeedItem?: DisplayFeedItem }> {
+export async function addFeed(userInputUrl: string): Promise<{ success: boolean; message?: string; newFeedItem?: DisplayFeedItem }> {
+  const trimmedUrl = userInputUrl.trim();
+  if (!trimmedUrl) {
+    return { success: false, message: 'URL cannot be empty.' };
+  }
+
   let channelId: string | null = null;
   let finalFeedUrl: string = '';
   let fetchedChannelName: string | undefined = undefined;
 
-  channelId = extractChannelIdFromXmlFeedUrl(url);
+  channelId = extractChannelIdFromXmlFeedUrl(trimmedUrl);
   if (channelId) {
-    finalFeedUrl = url; // URL is already the correct feed URL
+    finalFeedUrl = trimmedUrl;
   } else {
-    // Check if it's a recognizable YouTube page URL
-    const pageUrlPattern = /^(https?:\/\/)?(www\.)?youtube\.com\/(@[\w.-]+|c\/[\w.-]+|user\/[\w.-]+|channel\/UC[\w-]{22})/;
-    if (pageUrlPattern.test(url)) {
-      const details = await fetchChannelDetailsFromPage(url.startsWith('http') ? url : `https://${url}`);
-      if (details && details.channelId) {
-        channelId = details.channelId;
-        finalFeedUrl = constructFeedUrl(channelId);
-        fetchedChannelName = details.channelName;
-      } else {
-        return { success: false, message: 'Could not automatically extract YouTube Channel ID from the provided URL. The page might not contain the ID, or scraping failed. Please try the direct feed URL format: https://www.youtube.com/feeds/videos.xml?channel_id=...' };
+    let urlToFetch = trimmedUrl;
+    const lowerUrl = trimmedUrl.toLowerCase();
+
+    if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://')) {
+      if (lowerUrl.startsWith('@')) { // @handle
+        urlToFetch = `https://www.youtube.com/${trimmedUrl}`;
+      } else if (lowerUrl.includes('youtube.com/')) { // youtube.com/@handle or www.youtube.com/c/name
+        urlToFetch = `https://${trimmedUrl.substring(lowerUrl.indexOf('youtube.com/'))}`;
+      } else if (lowerUrl.startsWith('com/@')) { // com/@handle -> youtube.com/@handle
+        urlToFetch = `https://www.youtube.${trimmedUrl}`;
+      } else if (trimmedUrl.startsWith('/')) { // /@handle or /c/name
+        urlToFetch = `https://www.youtube.com${trimmedUrl}`;
+      } else if (/^UC[\w-]{22}$/.test(trimmedUrl)) { // Raw UCxxxx ID
+        urlToFetch = `https://www.youtube.com/channel/${trimmedUrl}`;
       }
+      // If still no http(s), fetchChannelDetailsFromPage will prepend https://
+    }
+    
+    const details = await fetchChannelDetailsFromPage(urlToFetch);
+    if (details && details.channelId) {
+      channelId = details.channelId;
+      finalFeedUrl = constructFeedUrl(channelId);
+      fetchedChannelName = details.channelName;
     } else {
-      return { success: false, message: 'Invalid URL format. Please provide a YouTube channel page URL (e.g., https://youtube.com/@handle or /c/name) or a direct feed URL (https://www.youtube.com/feeds/videos.xml?channel_id=...).' };
+      return { success: false, message: 'Could not extract Channel ID. Please check the URL or try a different format (e.g., youtube.com/@handle or a direct feed URL).' };
     }
   }
 
   if (!channelId) {
+    // This case should ideally be caught by the logic above.
     return { success: false, message: 'Could not determine YouTube Channel ID from the URL.' };
   }
 
@@ -183,8 +194,8 @@ export async function addFeed(url: string): Promise<{ success: boolean; message?
     return { success: false, message: `Feed for channel ID ${channelId} already exists.` };
   }
 
-  const newChannelName = fetchedChannelName || "New Channel (please edit)";
-  const defaultDiscordChannel = "default_discord_id"; // Consider making this configurable or an empty string
+  const newChannelName = fetchedChannelName || "New Channel (edit name)";
+  const defaultDiscordChannel = "default_discord_id"; 
 
   currentData[channelId] = {
     name: newChannelName,
@@ -214,7 +225,6 @@ export async function deleteFeeds(urlsToDelete: string[]): Promise<{ success: bo
   const deletedChannelNames: string[] = [];
 
   for (const url of urlsToDelete) {
-    // For deletion, we rely on the URL being the XML feed URL, which is what's stored/displayed
     const channelId = extractChannelIdFromXmlFeedUrl(url);
     if (channelId && currentData[channelId]) {
       deletedChannelNames.push(currentData[channelId].name);
@@ -232,7 +242,6 @@ export async function deleteFeeds(urlsToDelete: string[]): Promise<{ success: bo
       return { success: false, message: writeResult.message || 'Failed to save deletions to repository.' };
     }
   } else if (urlsToDelete.length > 0) {
-    // No changes made, but deletions were requested. Could mean URLs were already gone or malformed.
     return { success: false, message: "No matching feeds found for deletion, or URLs were invalid."}
   }
   return { success: true };
@@ -246,7 +255,6 @@ export async function updateRawJson(jsonContent: string): Promise<{ success: boo
       return { success: false, message: 'Invalid JSON structure. Must be an object.' };
     }
     for (const key in parsedData) {
-      // Validate key format as YouTube Channel ID (UCxxxxxxxxxxxx)
       if (!/^UC[\w-]{22}$/.test(key)) {
          return { success: false, message: `Invalid key format: "${key}". Key must be a valid YouTube Channel ID.` };
       }
@@ -303,3 +311,4 @@ export async function updateFeedDiscordChannel(channelId: string, newDiscordChan
   };
   return { success: true, updatedFeedItem };
 }
+

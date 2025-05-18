@@ -10,28 +10,24 @@ import { Input } from "@/components/ui/input";
 import { PlusCircle } from 'lucide-react';
 
 const addFeedFormSchema = z.object({
-  feedUrl: z.string().url({ message: "Please enter a valid URL." })
+  feedUrl: z.string().min(3, { message: "URL seems too short." }) // Min length for "UCX" or "@a"
     .refine(url => {
-      try {
-        const parsedUrl = new URL(url);
-        const hostname = parsedUrl.hostname.toLowerCase();
-        const pathname = parsedUrl.pathname.toLowerCase();
-        
-        const isYouTubeDomain = hostname === 'www.youtube.com' || hostname === 'youtube.com';
-        if (!isYouTubeDomain) return false;
+      const lowerUrl = url.toLowerCase();
+      // Check for keywords or patterns that indicate it's likely a YouTube URL, handle, or ID
+      const looksLikeYouTube = 
+        lowerUrl.includes('youtube.com') ||
+        lowerUrl.includes('youtu.be') || // Handles short links
+        lowerUrl.startsWith('@') || // Handles @username format
+        (lowerUrl.startsWith('uc') && lowerUrl.length > 20) || // Basic check for UC channel IDs
+        lowerUrl.includes('/@') ||
+        lowerUrl.includes('/c/') ||
+        lowerUrl.includes('/user/') ||
+        lowerUrl.includes('/channel/') ||
+        lowerUrl.includes('/feeds/videos.xml');
 
-        return (
-          pathname.startsWith('/feeds/videos.xml') || // Direct feed URL
-          pathname.startsWith('/@') ||                 // Handle URL
-          pathname.startsWith('/c/') ||                  // Custom name URL
-          pathname.startsWith('/user/') ||               // Legacy user URL
-          pathname.startsWith('/channel/')              // Direct channel ID URL
-        );
-      } catch (e) {
-        return false; // Invalid URL format
-      }
+      return looksLikeYouTube;
     }, {
-      message: "Please enter a valid YouTube channel page URL (e.g., https://youtube.com/@handle, /c/name, /channel/ID) or a direct feed URL (https://www.youtube.com/feeds/videos.xml?channel_id=...)."
+      message: "Enter a YouTube URL (e.g. youtube.com/@handle), @handle, channel ID (UC...), or feed link."
     }),
 });
 
@@ -70,7 +66,7 @@ export function AddFeedForm({ onAddFeed, isLoading }: AddFeedFormProps) {
               <FormLabel>New YouTube Channel or Feed URL</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="e.g., https://youtube.com/@hcr2star or ...videos.xml?channel_id=..." 
+                  placeholder="e.g., youtube.com/@hcr2star or @hcr2star or ...videos.xml?channel_id=..." 
                   {...field} 
                   disabled={isLoading}
                 />
