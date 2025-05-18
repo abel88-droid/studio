@@ -54,6 +54,10 @@ body {
     --sidebar-accent-foreground: 45 100% 10%;
     --sidebar-border: 220 20% 25%;
     --sidebar-ring: 45 100% 55%;
+
+    /* Dragon Scale Pattern Colors */
+    --pattern-scales-color-1: hsl(220 20% 15%); /* Slightly lighter than background for scale lines */
+    --pattern-scales-color-2: hsl(220 20% 18%); /* Another shade for scale highlights (matches card bg) */
   }
 
   .dark {
@@ -86,6 +90,10 @@ body {
     --sidebar-accent-foreground: 231 40% 10%;
     --sidebar-border: 231 20% 25%;
     --sidebar-ring: 187 100% 52%;
+
+    /* Dragon Scale Pattern Colors for standard dark theme */
+    --pattern-scales-color-1: hsl(231 20% 15%); 
+    --pattern-scales-color-2: hsl(231 20% 18%);
   }
 }
 
@@ -94,6 +102,16 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground; /* This sets the base background color */
+    /* Add dragon scale pattern */
+    background-image:
+      linear-gradient(30deg, var(--pattern-scales-color-1) 12%, transparent 12.5%, transparent 87%, var(--pattern-scales-color-1) 87.5%, var(--pattern-scales-color-1)),
+      linear-gradient(150deg, var(--pattern-scales-color-1) 12%, transparent 12.5%, transparent 87%, var(--pattern-scales-color-1) 87.5%, var(--pattern-scales-color-1)),
+      linear-gradient(30deg, var(--pattern-scales-color-1) 12%, transparent 12.5%, transparent 87%, var(--pattern-scales-color-1) 87.5%, var(--pattern-scales-color-1)),
+      linear-gradient(150deg, var(--pattern-scales-color-1) 12%, transparent 12.5%, transparent 87%, var(--pattern-scales-color-1) 87.5%, var(--pattern-scales-color-1)),
+      linear-gradient(60deg, var(--pattern-scales-color-2) 25%, transparent 25.5%, transparent 75%, var(--pattern-scales-color-2) 75%, var(--pattern-scales-color-2)),
+      linear-gradient(60deg, var(--pattern-scales-color-2) 25%, transparent 25.5%, transparent 75%, var(--pattern-scales-color-2) 75%, var(--pattern-scales-color-2));
+    background-size: 80px 140px; /* Size of the repeating pattern unit */
+    background-position: 0 0, 0 0, 40px 70px, 40px 70px, 0 0, 40px 70px;
   }
 }
