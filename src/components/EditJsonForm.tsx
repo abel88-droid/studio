@@ -25,10 +25,10 @@ const editJsonFormSchema = z.object({
         }
         for (const key in parsed) {
           // Key should be a valid channel ID (basic check, can be improved)
-          if (!/^[a-zA-Z0-9_-]{24}$/.test(key) && !key.startsWith('UC')) { 
-            // console.warn(`Invalid key format for channel ID: ${key}`);
-            // Relaxing this check as user might have different ID formats.
-            // Main check is on the value structure.
+          // Channel IDs typically start with 'UC' and are 24 characters long.
+          if (!/^UC[\w-]{22}$/.test(key)) { 
+            // console.warn(`Invalid key format for channel ID: ${key}. Expected 'UC' followed by 22 alphanumeric characters, hyphens, or underscores.`);
+            // Relaxing this for the form, server-side will be stricter.
           }
           const channelInfo = parsed[key] as FeedChannelInfo;
           if (typeof channelInfo !== 'object' || channelInfo === null ||
@@ -41,7 +41,7 @@ const editJsonFormSchema = z.object({
       } catch (e) {
         return false;
       }
-    }, { message: "Invalid JSON. Must be an object where each key is a YouTube Channel ID, and the value is an object with 'name' (string) and 'discordChannel' (string) properties." }),
+    }, { message: "Invalid JSON. Must be an object where each key is a YouTube Channel ID (e.g., \"UCYL-QGEkA1r7R7U5rN_Yonw\"), and the value is an object with 'name' (string) and 'discordChannel' (string) properties." }),
 });
 
 type EditJsonFormValues = z.infer<typeof editJsonFormSchema>;
@@ -81,14 +81,22 @@ export function EditJsonForm({ initialJsonContent, onUpdateJson, isLoading }: Ed
             <FormItem>
               <FormLabel>feed.json Content</FormLabel>
               <FormDescription>
-                The JSON file should be an object. Each key must be a unique YouTube Channel ID (e.g., "UCxxxxxxxxxxxx").
+                The JSON file should be an object. Each key must be a unique YouTube Channel ID (e.g., <code>"UCYL-QGEkA1r7R7U5rN_Yonw"</code>).
                 The value for each key must be an object with two string properties:
-                <code className="block bg-muted p-1 rounded text-xs my-1">"name": "Your Channel Display Name"</code>
                 <code className="block bg-muted p-1 rounded text-xs my-1">"discordChannel": "Your Discord Channel ID for notifications"</code>
+                <code className="block bg-muted p-1 rounded text-xs my-1">"name": "Your Channel Display Name"</code>
+                <br />
+                Example:
+                <pre className="mt-1 rounded-md bg-muted p-2 text-xs overflow-x-auto">
+{`{
+  "UCYL-QGEkA1r7R7U5rN_Yonw": { "discordChannel": "1341719063780393031", "name": "Vereshchak" },
+  "UC16xML3oyIZDeF3g8nnV6MA": { "discordChannel": "1341719063780393031", "name": "Vokope" }
+}`}
+                </pre>
               </FormDescription>
               <FormControl>
                 <Textarea
-                  placeholder='{\n  "UCxxxxxxxxxxxx": { "name": "Channel Name", "discordChannel": "123456789012345678" },\n  "UCyyyyyyyyyyyy": { "name": "Another Channel", "discordChannel": "876543210987654321" }\n}'
+                  placeholder='{\n  "UCYL-QGEkA1r7R7U5rN_Yonw": { "discordChannel": "1341719063780393031", "name": "Vereshchak" },\n  "UC16xML3oyIZDeF3g8nnV6MA": { "discordChannel": "1341719063780393031", "name": "Vokope" }\n}'
                   className="min-h-[200px] font-mono text-sm mt-2"
                   {...field}
                   disabled={isLoading}
