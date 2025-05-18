@@ -24,11 +24,10 @@ const editJsonFormSchema = z.object({
             return true;
         }
         for (const key in parsed) {
-          // Key should be a valid channel ID (basic check, can be improved)
-          // Channel IDs typically start with 'UC' and are 24 characters long.
+          // Key should be a valid channel ID
           if (!/^UC[\w-]{22}$/.test(key)) { 
-            // console.warn(`Invalid key format for channel ID: ${key}. Expected 'UC' followed by 22 alphanumeric characters, hyphens, or underscores.`);
-            // Relaxing this for the form, server-side will be stricter.
+             // This detailed server-side validation is now primarily in feed-actions.ts
+             // Client-side can be a bit more relaxed, focusing on general structure.
           }
           const channelInfo = parsed[key] as FeedChannelInfo;
           if (typeof channelInfo !== 'object' || channelInfo === null ||
@@ -41,7 +40,7 @@ const editJsonFormSchema = z.object({
       } catch (e) {
         return false;
       }
-    }, { message: "Invalid JSON. Must be an object where each key is a YouTube Channel ID (e.g., \"UCYL-QGEkA1r7R7U5rN_Yonw\"), and the value is an object with 'name' (string) and 'discordChannel' (string) properties." }),
+    }, { message: "Invalid JSON. Must be an object where each key is a YouTube Channel ID (e.g., \"UCYL-QGEkA1r7R7U5rN_Yonw\"), and the value is an object with 'name' (string) and 'discordChannel' (string) properties. See example format." }),
 });
 
 type EditJsonFormValues = z.infer<typeof editJsonFormSchema>;
@@ -87,13 +86,13 @@ export function EditJsonForm({ initialJsonContent, onUpdateJson, isLoading }: Ed
                 <code className="block bg-muted p-1 rounded text-xs my-1">"name": "Your Channel Display Name"</code>
                 <br />
                 Example:
-                <pre className="mt-1 rounded-md bg-muted p-2 text-xs overflow-x-auto">
+              </FormDescription>
+              <pre className="mt-1 rounded-md bg-muted p-2 text-xs overflow-x-auto text-muted-foreground">
 {`{
   "UCYL-QGEkA1r7R7U5rN_Yonw": { "discordChannel": "1341719063780393031", "name": "Vereshchak" },
   "UC16xML3oyIZDeF3g8nnV6MA": { "discordChannel": "1341719063780393031", "name": "Vokope" }
 }`}
-                </pre>
-              </FormDescription>
+              </pre>
               <FormControl>
                 <Textarea
                   placeholder='{\n  "UCYL-QGEkA1r7R7U5rN_Yonw": { "discordChannel": "1341719063780393031", "name": "Vereshchak" },\n  "UC16xML3oyIZDeF3g8nnV6MA": { "discordChannel": "1341719063780393031", "name": "Vokope" }\n}'
