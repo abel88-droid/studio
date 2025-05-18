@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,8 +11,27 @@ import { PlusCircle } from 'lucide-react';
 
 const addFeedFormSchema = z.object({
   feedUrl: z.string().url({ message: "Please enter a valid URL." })
-    .refine(url => url.startsWith("https://www.youtube.com/feeds/videos.xml?"), {
-      message: "URL must be a valid YouTube feed URL (e.g., https://www.youtube.com/feeds/videos.xml?channel_id=...)."
+    .refine(url => {
+      try {
+        const parsedUrl = new URL(url);
+        const hostname = parsedUrl.hostname.toLowerCase();
+        const pathname = parsedUrl.pathname.toLowerCase();
+        
+        const isYouTubeDomain = hostname === 'www.youtube.com' || hostname === 'youtube.com';
+        if (!isYouTubeDomain) return false;
+
+        return (
+          pathname.startsWith('/feeds/videos.xml') || // Direct feed URL
+          pathname.startsWith('/@') ||                 // Handle URL
+          pathname.startsWith('/c/') ||                  // Custom name URL
+          pathname.startsWith('/user/') ||               // Legacy user URL
+          pathname.startsWith('/channel/')              // Direct channel ID URL
+        );
+      } catch (e) {
+        return false; // Invalid URL format
+      }
+    }, {
+      message: "Please enter a valid YouTube channel page URL (e.g., https://youtube.com/@handle, /c/name, /channel/ID) or a direct feed URL (https://www.youtube.com/feeds/videos.xml?channel_id=...)."
     }),
 });
 
@@ -47,10 +67,11 @@ export function AddFeedForm({ onAddFeed, isLoading }: AddFeedFormProps) {
           name="feedUrl"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>New Feed URL</FormLabel>
+              <FormLabel>New YouTube Channel or Feed URL</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="https://www.youtube.com/feeds/videos.xml?channel_id=..." {...field} 
+                  placeholder="e.g., https://youtube.com/@hcr2star or ...videos.xml?channel_id=..." 
+                  {...field} 
                   disabled={isLoading}
                 />
               </FormControl>
