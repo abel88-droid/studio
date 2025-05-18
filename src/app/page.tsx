@@ -16,24 +16,19 @@ export default async function HomePage() {
 
   return (
     <div className="container mx-auto min-h-screen p-4 py-8 md:p-8">
-      <header className="mb-12 flex flex-col items-center text-center sm:flex-row sm:items-center sm:justify-center sm:gap-6">
+      <header className="mb-12 flex flex-col items-center text-center">
         <Image
-          src="https://placehold.co/120x100.png"
-          alt="Dragon emblem"
-          width={120}
-          height={100}
-          className="rounded-md shadow-lg mb-4 sm:mb-0 order-1 sm:order-none"
-          data-ai-hint="dragon"
+          src="https://placehold.co/400x150.png"
+          alt="DC dashboard dragon logo"
+          width={400}
+          height={150}
+          className="rounded-md shadow-lg mb-6"
+          data-ai-hint="dragon logo text"
           priority
         />
-        <div className="order-2 sm:order-none">
-          <h1 className="text-5xl font-bold tracking-tight text-primary">
-            DC dashboard
-          </h1>
-          <p className="mt-2 text-lg text-muted-foreground">
-            Your YouTube Feed Management Dashboard
-          </p>
-        </div>
+        <p className="text-lg text-muted-foreground">
+          Your YouTube Feed Management Dashboard
+        </p>
       </header>
 
       <main>
