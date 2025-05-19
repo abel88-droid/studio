@@ -1,8 +1,10 @@
+
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import SessionProviderWrapper from './SessionProviderWrapper';
 
 const geistSans = GeistSans; // Use the imported variable directly
 const geistMono = GeistMono;
@@ -20,8 +22,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        {children}
-        <Toaster /> {/* Add Toaster here for global toast notifications */}
+        <SessionProviderWrapper>
+          {children}
+          <Toaster /> {/* Add Toaster here for global toast notifications */}
+        </SessionProviderWrapper>
       </body>
     </html>
   );
