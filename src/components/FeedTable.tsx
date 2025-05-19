@@ -7,13 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 import type { DisplayFeedItem } from '@/types';
 
 interface DiscordChannelInputProps {
-  initialValue: string; // This will be the raw numeric ID
+  initialValue: string; 
   channelId: string;
-  onSave: (channelId: string, newValue: string) => Promise<void>; // newValue is the string from input
+  onSave: (channelId: string, newValue: string) => Promise<void>; 
   disabled: boolean;
 }
 
@@ -21,14 +21,10 @@ const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, chann
   const [value, setValue] = useState(initialValue);
 
   useEffect(() => {
-    // When initialValue (raw ID from server) changes, update the input field's display value.
-    // This ensures the input reflects the actual stored data.
     setValue(initialValue);
   }, [initialValue]);
 
   const handleBlur = async () => {
-    // Only save if the typed value is different from the initial raw ID.
-    // The server will parse and validate the format.
     if (value !== initialValue) {
       await onSave(channelId, value);
     }
@@ -41,7 +37,7 @@ const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, chann
       onBlur={handleBlur}
       disabled={disabled}
       className="text-sm h-8"
-      placeholder="#name-ID or raw ID" // Updated placeholder
+      placeholder="#name-ID or raw ID"
     />
   );
 };
@@ -49,12 +45,15 @@ const DiscordChannelInput: FC<DiscordChannelInputProps> = ({ initialValue, chann
 
 interface FeedTableProps {
   feeds: DisplayFeedItem[];
-  selectedFeeds: string[]; // Stores URLs of selected feeds
+  selectedFeeds: string[]; 
   onToggleSelectFeed: (feedUrl: string) => void;
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
   onUpdateFeedDiscordChannel: (channelId: string, newDiscordIdInput: string) => Promise<void>;
   isLoading: boolean;
+  sortKey: 'name' | 'url' | null;
+  sortOrder: 'asc' | 'desc';
+  onSort: (key: 'name' | 'url') => void;
 }
 
 export const FeedTable: FC<FeedTableProps> = ({
@@ -65,9 +64,19 @@ export const FeedTable: FC<FeedTableProps> = ({
   onDeleteSelected,
   onUpdateFeedDiscordChannel,
   isLoading,
+  sortKey,
+  sortOrder,
+  onSort,
 }) => {
   const allSelected = feeds.length > 0 && selectedFeeds.length === feeds.length;
   const someSelected = selectedFeeds.length > 0 && selectedFeeds.length < feeds.length;
+
+  const SortIcon = ({ columnKey }: { columnKey: 'name' | 'url' }) => {
+    if (sortKey === columnKey) {
+      return sortOrder === 'asc' ? <ArrowUp className="ml-1 h-4 w-4" /> : <ArrowDown className="ml-1 h-4 w-4" />;
+    }
+    return <ChevronsUpDown className="ml-1 h-4 w-4 opacity-30" />;
+  };
 
   return (
     <div className="space-y-4">
@@ -88,7 +97,7 @@ export const FeedTable: FC<FeedTableProps> = ({
           <Button
             variant="destructive"
             size="sm"
-            onClick={onDeleteSelected}
+            onClick={onDeleteSelected} // This now triggers the dialog in FeedDashboard
             disabled={selectedFeeds.length === 0 || isLoading}
           >
             <Trash2 className="mr-2 h-4 w-4" />
@@ -101,8 +110,24 @@ export const FeedTable: FC<FeedTableProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[50px]"></TableHead>
-              <TableHead>Channel Name</TableHead>
-              <TableHead>Feed URL</TableHead>
+              <TableHead 
+                className="cursor-pointer hover:bg-muted/80 transition-colors"
+                onClick={() => onSort('name')}
+                title="Click to sort by Channel Name"
+              >
+                <div className="flex items-center">
+                  Channel Name <SortIcon columnKey="name" />
+                </div>
+              </TableHead>
+              <TableHead 
+                className="cursor-pointer hover:bg-muted/80 transition-colors"
+                onClick={() => onSort('url')}
+                title="Click to sort by Feed URL"
+              >
+                 <div className="flex items-center">
+                  Feed URL <SortIcon columnKey="url" />
+                </div>
+              </TableHead>
               <TableHead className="min-w-[250px]">Discord Channel (#name-ID or ID)</TableHead> 
             </TableRow>
           </TableHeader>
@@ -150,4 +175,3 @@ export const FeedTable: FC<FeedTableProps> = ({
     </div>
   );
 };
-

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { addFeed, deleteFeeds, updateRawJson, updateFeedDiscordChannel } from '@/lib/feed-actions';
 import { FeedTable } from './FeedTable';
 import { AddFeedForm } from './AddFeedForm';
@@ -11,6 +11,17 @@ import { ListChecks, PlusCircle, Edit3, AlertTriangle, CheckCircle, Loader2 } fr
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button"; // Keep for AlertDialogAction if needed
 import type { FeedData, DisplayFeedItem } from '@/types';
 
 function extractChannelIdFromUrl(url: string): string | null {
@@ -32,7 +43,7 @@ function mapFeedDataToDisplayItems(feedData: FeedData): DisplayFeedItem[] {
     channelId,
     url: constructFeedUrl(channelId),
     name: info.name,
-    discordChannel: info.discordChannel, // Ensure discordChannel is mapped
+    discordChannel: info.discordChannel,
   }));
 }
 
@@ -43,9 +54,12 @@ interface FeedDashboardProps {
 
 export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson }: FeedDashboardProps) {
   const [feeds, setFeeds] = useState<DisplayFeedItem[]>(serverInitialFeeds);
-  const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]); // Stores URLs of selected feeds
+  const [selectedFeeds, setSelectedFeeds] = useState<string[]>([]);
   const [rawJsonInput, setRawJsonInput] = useState<string>(initialRawJson);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<'name' | 'url' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -59,6 +73,26 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     setRawJsonInput(initialRawJson);
   }, [initialRawJson, serverInitialFeeds]);
 
+  const handleSort = (key: 'name' | 'url') => {
+    if (sortKey === key) {
+      setSortOrder(prevOrder => prevOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedFeeds = useMemo(() => {
+    if (!sortKey) return feeds;
+    return [...feeds].sort((a, b) => {
+      const valA = a[sortKey].toLowerCase();
+      const valB = b[sortKey].toLowerCase();
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [feeds, sortKey, sortOrder]);
+
 
   const handleAddFeed = async (url: string) => {
     setIsLoading(true);
@@ -69,7 +103,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
           const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
           currentJsonData[result.newFeedItem.channelId] = { 
             name: result.newFeedItem.name, 
-            discordChannel: result.newFeedItem.discordChannel // Use discordChannel from newFeedItem
+            discordChannel: result.newFeedItem.discordChannel
           };
           setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
       } catch (e) {
@@ -92,10 +126,23 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     return {success: result.success, message: result.message};
   };
 
-  const handleDeleteSelectedFeeds = async () => {
-    if (selectedFeeds.length === 0) return;
+  const promptDeleteSelectedFeeds = () => {
+    if (selectedFeeds.length === 0) {
+        toast({
+            variant: "destructive",
+            title: "No feeds selected",
+            description: "Please select feeds to delete.",
+            action: <AlertTriangle className="text-red-500" />,
+        });
+        return;
+    }
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const confirmDeleteSelectedFeeds = async () => {
     setIsLoading(true);
-    const result = await deleteFeeds(selectedFeeds); // Pass URLs to delete
+    setIsDeleteDialogOpen(false);
+    const result = await deleteFeeds(selectedFeeds);
     if (result.success) {
       const newFeeds = feeds.filter(feed => !selectedFeeds.includes(feed.url));
       setFeeds(newFeeds); 
@@ -115,7 +162,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
       setSelectedFeeds([]);
       toast({
         title: "Feeds deleted",
-        description: `${selectedFeeds.length} feed(s) have been successfully deleted.`,
+        description: result.message || `${selectedFeeds.length} feed(s) have been successfully deleted.`,
         action: <CheckCircle className="text-green-500" />,
       });
     } else {
@@ -135,7 +182,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     if (result.success) {
       try {
         const parsedData = JSON.parse(jsonContent) as FeedData;
-        setFeeds(mapFeedDataToDisplayItems(parsedData)); // This will now map discordChannel too
+        setFeeds(mapFeedDataToDisplayItems(parsedData));
         setRawJsonInput(jsonContent); 
          toast({
           title: "JSON updated",
@@ -166,7 +213,6 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
     setIsLoading(true);
     const result = await updateFeedDiscordChannel(channelId, newDiscordId);
     if (result.success && result.updatedFeedItem) {
-      // Update local feeds state
       setFeeds(prevFeeds => 
         prevFeeds.map(feed => 
           feed.channelId === channelId 
@@ -174,11 +220,10 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
             : feed
         )
       );
-      // Update rawJsonInput state
       try {
         const currentJsonData = JSON.parse(rawJsonInput) as FeedData;
         if (currentJsonData[channelId]) {
-          currentJsonData[channelId].discordChannel = newDiscordId;
+          currentJsonData[channelId].discordChannel = result.updatedFeedItem.discordChannel;
           setRawJsonInput(JSON.stringify(currentJsonData, null, 2));
         }
       } catch (e) {
@@ -196,13 +241,9 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
         description: result.message || "Could not update Discord channel.",
         action: <AlertTriangle className="text-red-500" />,
       });
-      // Optionally, revert optimistic UI update if any, or refresh data
-      // For now, we rely on the DiscordChannelInput's useEffect to reset if initialValue changes
-      // due to a failed backend update that might trigger a parent data refresh.
     }
     setIsLoading(false);
   };
-
 
   const handleToggleSelectFeed = (feedUrl: string) => {
     setSelectedFeeds(prev =>
@@ -227,18 +268,21 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
             Your YouTube Feeds
           </CardTitle>
           <CardDescription>
-            Manage your list of YouTube feed URLs. Select feeds to delete them. You can also edit the Discord Channel ID for each feed directly in the table.
+            Manage your list of YouTube feed URLs. Select feeds to delete them. You can also edit the Discord Channel ID for each feed directly in the table. Click on column headers to sort.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <FeedTable
-            feeds={feeds}
+            feeds={sortedFeeds}
             selectedFeeds={selectedFeeds} 
             onToggleSelectFeed={handleToggleSelectFeed}
             onToggleSelectAll={handleToggleSelectAll}
-            onDeleteSelected={handleDeleteSelectedFeeds}
-            onUpdateFeedDiscordChannel={handleUpdateFeedDiscordChannel} // Pass the handler
+            onDeleteSelected={promptDeleteSelectedFeeds}
+            onUpdateFeedDiscordChannel={handleUpdateFeedDiscordChannel}
             isLoading={isLoading}
+            sortKey={sortKey}
+            sortOrder={sortOrder}
+            onSort={handleSort}
           />
         </CardContent>
       </Card>
@@ -253,7 +297,7 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
               Add New Feed
             </CardTitle>
             <CardDescription>
-              Enter a valid YouTube feed URL to add it to your list. Name and Discord channel can be edited in the raw JSON editor or directly in the table.
+              Enter a YouTube channel URL (e.g. @handle, channel page, video URL) or a direct feed URL.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -277,6 +321,27 @@ export function FeedDashboard({ initialFeeds: serverInitialFeeds, initialRawJson
         </Card>
       </div>
       
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently delete {selectedFeeds.length} selected feed(s) from your feed.json.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteSelectedFeeds}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Toaster />
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
