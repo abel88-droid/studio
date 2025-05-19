@@ -10,14 +10,14 @@ import { Input } from "@/components/ui/input";
 import { PlusCircle } from 'lucide-react';
 
 const addFeedFormSchema = z.object({
-  feedUrl: z.string().min(3, { message: "URL seems too short." }) // Min length for "UCX" or "@a"
+  feedUrl: z.string().min(3, { message: "URL or ID seems too short." })
     .refine(url => {
       const lowerUrl = url.toLowerCase();
       // Check for keywords or patterns that indicate it's likely a YouTube URL, handle, or ID
-      const looksLikeYouTube = 
+      const looksLikeYouTube =
         lowerUrl.includes('youtube.com') ||
-        lowerUrl.includes('youtu.be') || // Handles short links
-        lowerUrl.startsWith('@') || // Handles @username format
+        lowerUrl.includes('youtu.be') ||
+        lowerUrl.startsWith('@') ||
         (lowerUrl.startsWith('uc') && lowerUrl.length > 20) || // Basic check for UC channel IDs
         lowerUrl.includes('/@') ||
         lowerUrl.includes('/c/') ||
@@ -27,7 +27,7 @@ const addFeedFormSchema = z.object({
 
       return looksLikeYouTube;
     }, {
-      message: "Enter a YouTube URL (e.g. youtube.com/@handle), @handle, channel ID (UC...), or feed link."
+      message: "Enter a YouTube URL (e.g., @handle, channel/video URL), raw Channel ID (UC...), or feed link."
     }),
 });
 
@@ -65,9 +65,9 @@ export function AddFeedForm({ onAddFeed, isLoading }: AddFeedFormProps) {
             <FormItem>
               <FormLabel>New YouTube Channel or Feed URL</FormLabel>
               <FormControl>
-                <Input 
-                  placeholder="e.g., youtube.com/@hcr2star or @hcr2star or ...videos.xml?channel_id=..." 
-                  {...field} 
+                <Input
+                  placeholder="e.g., @handle, channel/video URL, raw Channel ID (UC...), or ...videos.xml"
+                  {...field}
                   disabled={isLoading}
                 />
               </FormControl>
