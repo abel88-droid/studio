@@ -31,7 +31,7 @@ export default async function HomePage() {
           priority
         />
         <p className="text-lg text-muted-foreground">
-          Your YouTube Feed Management Dashboard
+          YouTube Feed Management Dashboard
         </p>
       </header>
 
