@@ -7,7 +7,7 @@ import { AuthButton } from '@/components/AuthButton';
 
 export const metadata: Metadata = {
   title: 'DC dashboard - YouTube Feed Manager',
-  description: 'Manage your YouTube feeds from your GitHub repository.',
+  description: 'Manage parasu your YouTube feeds from your GitHub repository.',
 };
 
 export default async function HomePage() {
